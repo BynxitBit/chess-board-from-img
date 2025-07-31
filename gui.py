@@ -11,22 +11,31 @@ class ChessGUI:
         self.square_size = board_size // 8
         self.screen = pygame.display.set_mode((board_size, board_size + 50))
         pygame.display.set_caption("Chess Vision")
-        
         self.piece_images = self.load_piece_images()
-        
         self.selected_square = None
         self.valid_moves = []
     
     def load_piece_images(self):
         pieces = {}
+        piece_symbols = {
+            'P': chess.PAWN,
+            'N': chess.KNIGHT,
+            'B': chess.BISHOP,
+            'R': chess.ROOK,
+            'Q': chess.QUEEN,
+            'K': chess.KING
+        }
+        
         for color in ['w', 'b']:
-            for piece in ['P', 'N', 'B', 'R', 'Q', 'K']:
-                svg = chess.svg.piece(chess.Piece.from_symbol(piece), color=color)
+            for symbol, piece_type in piece_symbols.items():
+                chess_piece = chess.Piece(piece_type, chess.WHITE if color == 'w' else chess.BLACK)
+                svg = chess.svg.piece(chess_piece)
                 
                 png = cairosvg.svg2png(bytestring=svg.encode('utf-8'))
                 img = pygame.image.load(BytesIO(png))
                 
-                pieces[f"{color}{piece}"] = pygame.transform.smoothscale(
+                key = f"{color}{symbol}"
+                pieces[key] = pygame.transform.smoothscale(
                     img, (self.square_size, self.square_size))
         return pieces
     

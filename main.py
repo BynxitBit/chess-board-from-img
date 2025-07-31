@@ -9,6 +9,14 @@ from gui import ChessGUI
 def image_to_fen(image_path, debug=False):
     try:
         board_img = process_board_image(image_path)
+        cv2.imwrite("cropped_board.jpg", board_img)
+        border_size = 1
+        board_img = cv2.copyMakeBorder(
+            board_img, 
+            border_size, border_size, border_size, border_size, 
+            cv2.BORDER_CONSTANT, 
+            value=[0, 0, 0]
+        )
         
         recognizer = PieceRecognizer("pieces", debug=debug)
         
@@ -20,8 +28,10 @@ def image_to_fen(image_path, debug=False):
             empty_count = 0
             
             for col in range(8):
-                y1, y2 = row * square_size, (row + 1) * square_size
-                x1, x2 = col * square_size, (col + 1) * square_size
+                y1 = border_size + row * square_size
+                y2 = border_size + (row + 1) * square_size
+                x1 = border_size + col * square_size
+                x2 = border_size + (col + 1) * square_size
                 square_img = board_img[y1:y2, x1:x2]
                 
                 piece_code = recognizer.recognize_piece(square_img, row, col)
@@ -73,7 +83,7 @@ def main(image_path=None):
                 action = gui.handle_click(event.pos)
                 
                 if action == "RESET":
-                    game.reset_to_position(fen) if fen else game.reset_to_position()
+                    game.reset_to_position()
                 elif action == "COPY":
                     pygame.scrap.init()
                     pygame.scrap.put(pygame.SCRAP_TEXT, game.get_move_history().encode())

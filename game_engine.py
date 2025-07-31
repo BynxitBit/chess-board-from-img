@@ -3,6 +3,7 @@ import chess.svg
 
 class ChessGame:
     def __init__(self, fen=None):
+        self.initial_fen = fen
         self.board = chess.Board(fen) if fen else chess.Board()
         self.move_history = []
     
@@ -14,8 +15,9 @@ class ChessGame:
             return True
         return False
     
-    def reset_to_position(self, fen):
-        self.board = chess.Board(fen)
+    def reset_to_position(self):
+        self.board = chess.Board(self.initial_fen) if self.initial_fen else chess.Board()
+        self.move_history = []
     
     def get_fen(self):
         return self.board.fen()

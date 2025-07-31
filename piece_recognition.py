@@ -9,9 +9,12 @@ class PieceRecognizer:
         self.debug_dir = "debug_squares"
         if debug and not os.path.exists(self.debug_dir):
             os.makedirs(self.debug_dir)
+        
+        self.light_color = np.array([234, 233, 210])
+        self.dark_color = np.array([75, 115, 153])
+        self.color_threshold = 40
     
     def load_templates(self, dir_path):
-        """Load piece images with standardized processing"""
         templates = {}
         for file in os.listdir(dir_path):
             if file.endswith(".png"):
@@ -29,29 +32,28 @@ class PieceRecognizer:
                     templates[piece_code] = img
         return templates
     
-    def recognize_piece(self, square_img):
-        """Simplified recognition with background removal"""
+    def recognize_piece(self, square_img, row, col):
         if square_img.size == 0:
             return None
             
-        if self.debug:
-            cv2.imwrite(f"{self.debug_dir}/square_{row}_{col}.png", square_img)
-        
         processed_square = self.remove_background(square_img)
+        
+        if self.debug:
+            cv2.imwrite(f"{self.debug_dir}/square_{row}_{col}.png", processed_square)
         
         best_match = None
         max_val = 0
         
         for code, template in self.templates.items():
             h, w = processed_square.shape[:2]
-            template = cv2.resize(template, (w, h))
+            resized_template = cv2.resize(template, (w, h))
             
-            if template.shape[2] == 4:
-                mask = template[:, :, 3]
+            if resized_template.shape[2] == 4:
+                mask = resized_template[:, :, 3]
             else:
                 mask = None
             
-            template_gray = cv2.cvtColor(template[:, :, :3], cv2.COLOR_BGR2GRAY)
+            template_gray = cv2.cvtColor(resized_template[:, :, :3], cv2.COLOR_BGR2GRAY)
             square_gray = cv2.cvtColor(processed_square, cv2.COLOR_BGR2GRAY)
             
             template_gray = cv2.normalize(template_gray, None, 0, 255, cv2.NORM_MINMAX)
@@ -60,7 +62,9 @@ class PieceRecognizer:
             try:
                 res = cv2.matchTemplate(square_gray, template_gray, cv2.TM_CCOEFF_NORMED, mask=mask)
                 _, local_max_val, _, _ = cv2.minMaxLoc(res)
-            except:
+            except Exception as e:
+                if self.debug:
+                    print(f"Match error: {e}")
                 local_max_val = 0
                 
             if self.debug:
@@ -73,20 +77,15 @@ class PieceRecognizer:
         return best_match
     
     def remove_background(self, square_img):
-        """Remove board background to isolate pieces"""
-        light_color = np.array([234, 233, 210])
-        dark_color = np.array([75, 115, 153])
+        diff_light = np.linalg.norm(square_img - self.light_color, axis=2)
+        diff_dark = np.linalg.norm(square_img - self.dark_color, axis=2)
         
-        diff_light = np.abs(square_img - light_color)
-        diff_dark = np.abs(square_img - dark_color)
+        background_mask = np.logical_or(
+            diff_light < self.color_threshold,
+            diff_dark < self.color_threshold
+        )
         
-        mask_light = np.all(diff_light < 50, axis=2)
-        mask_dark = np.all(diff_dark < 50, axis=2)
-        background_mask = np.logical_or(mask_light, mask_dark)
-        
-        piece_mask = ~background_mask
-        
-        result = square_img.copy()
-        result[piece_mask] = [0, 0, 0]
+        result = np.zeros_like(square_img)
+        result[~background_mask] = square_img[~background_mask]
         
         return result
