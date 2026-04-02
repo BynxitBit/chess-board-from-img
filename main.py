@@ -5,8 +5,10 @@ from board_detection import process_board_image
 from piece_recognition import PieceRecognizer
 from game_engine import ChessGame
 from gui import ChessGUI
+from engine_worker import EngineWorker
+import subprocess
 
-def image_to_fen(image_path, debug=False):
+def image_to_fen(image_path, active_color="w", debug=False):
     try:
         board_img = process_board_image(image_path)
         cv2.imwrite("cropped_board.jpg", board_img)
@@ -61,7 +63,7 @@ def image_to_fen(image_path, debug=False):
             fen_rows.append("".join(fen_row))
 
         fen = "/".join(fen_rows)
-        fen += " w KQkq - 0 1"
+        fen += f" {active_color} KQkq - 0 1"
         return fen, is_flipped
 
     except Exception as e:
@@ -70,13 +72,27 @@ def image_to_fen(image_path, debug=False):
             traceback.print_exc()
         raise e
 
-def main(image_path=None):
-    fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+def _copy_to_clipboard(text):
+    for cmd in (
+        ["wl-copy"],
+        ["xclip", "-selection", "clipboard"],
+        ["xsel", "--clipboard", "--input"],
+    ):
+        try:
+            subprocess.run(cmd, input=text.encode(), check=True, timeout=2)
+            return
+        except (FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            continue
+    print(f"Clipboard unavailable. Move history: {text}")
+
+
+def main(image_path=None, active_color="w"):
+    fen = f"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR {active_color} KQkq - 0 1"
     is_flipped = False
 
     if image_path:
         try:
-            fen, is_flipped = image_to_fen(image_path, debug=True)
+            fen, is_flipped = image_to_fen(image_path, active_color=active_color, debug=True)
             print(f"Detected FEN: {fen}")
             print(f"Board perspective: {'Black' if is_flipped else 'White'}")
         except Exception as e:
@@ -85,29 +101,38 @@ def main(image_path=None):
 
     game = ChessGame(fen)
     gui = ChessGUI(game, flipped=is_flipped)
-    
+
+    worker = EngineWorker()
+    worker.request_analysis(game.get_fen())
+
     running = True
     while running:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
-            
+
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 action = gui.handle_click(event.pos)
-                
+
                 if action == "RESET":
                     game.reset_to_position()
+                    worker.request_analysis(game.get_fen())
+                elif action == "MOVE":
+                    worker.request_analysis(game.get_fen())
                 elif action == "COPY":
-                    pygame.scrap.init()
-                    pygame.scrap.put(pygame.SCRAP_TEXT, game.get_move_history().encode())
-        
+                    _copy_to_clipboard(game.get_move_history())
+
+        gui.update_analysis(worker.get_result())
         gui.screen.fill((255, 255, 255))
         gui.draw_board()
+        gui.draw_analysis_panel(worker.is_available())
         pygame.display.flip()
-    
+
+    worker.quit()
     pygame.quit()
     sys.exit()
 
 if __name__ == "__main__":
     image_path = sys.argv[1] if len(sys.argv) > 1 else None
-    main(image_path)
+    active_color = "b" if len(sys.argv) > 2 and sys.argv[2] == "1" else "w"
+    main(image_path, active_color)

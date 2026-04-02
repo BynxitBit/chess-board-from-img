@@ -10,8 +10,8 @@ class ChessGame:
     def make_move(self, uci_move):
         move = chess.Move.from_uci(uci_move)
         if move in self.board.legal_moves:
-            self.board.push(move)
             self.move_history.append(self.board.san(move))
+            self.board.push(move)
             return True
         return False
     
