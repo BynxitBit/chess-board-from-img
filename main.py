@@ -19,23 +19,35 @@ def image_to_fen(image_path, debug=False):
         )
         
         recognizer = PieceRecognizer("pieces", debug=debug)
-        
-        fen_rows = []
+
         square_size = board_img.shape[0] // 8
-        
+        recognizer.calibrate(board_img, square_size, border_size)
+        is_flipped = recognizer.detect_orientation(board_img, square_size, border_size)
+
+        # Build a 2D grid of piece codes so we can flip it if needed
+        piece_grid = []
         for row in range(8):
-            fen_row = []
-            empty_count = 0
-            
+            piece_row = []
             for col in range(8):
                 y1 = border_size + row * square_size
                 y2 = border_size + (row + 1) * square_size
                 x1 = border_size + col * square_size
                 x2 = border_size + (col + 1) * square_size
                 square_img = board_img[y1:y2, x1:x2]
-                
                 piece_code = recognizer.recognize_piece(square_img, row, col)
-                
+                piece_row.append(piece_code)
+            piece_grid.append(piece_row)
+
+        # If board is from Black's perspective (rank 1 at top, h-file on left),
+        # flip both axes to produce standard FEN (rank 8 at top, a-file on left).
+        if is_flipped:
+            piece_grid = [row[::-1] for row in piece_grid][::-1]
+
+        fen_rows = []
+        for piece_row in piece_grid:
+            fen_row = []
+            empty_count = 0
+            for piece_code in piece_row:
                 if piece_code:
                     if empty_count > 0:
                         fen_row.append(str(empty_count))
@@ -44,15 +56,14 @@ def image_to_fen(image_path, debug=False):
                     fen_row.append(fen_piece)
                 else:
                     empty_count += 1
-            
             if empty_count > 0:
                 fen_row.append(str(empty_count))
             fen_rows.append("".join(fen_row))
-        
+
         fen = "/".join(fen_rows)
         fen += " w KQkq - 0 1"
-        return fen
-        
+        return fen, is_flipped
+
     except Exception as e:
         if debug:
             import traceback
@@ -61,17 +72,19 @@ def image_to_fen(image_path, debug=False):
 
 def main(image_path=None):
     fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
-    
+    is_flipped = False
+
     if image_path:
         try:
-            fen = image_to_fen(image_path, debug=True)
+            fen, is_flipped = image_to_fen(image_path, debug=True)
             print(f"Detected FEN: {fen}")
+            print(f"Board perspective: {'Black' if is_flipped else 'White'}")
         except Exception as e:
             print(f"Error processing image: {e}")
             print("Using default starting position")
-    
+
     game = ChessGame(fen)
-    gui = ChessGUI(game)
+    gui = ChessGUI(game, flipped=is_flipped)
     
     running = True
     while running:

@@ -44,26 +44,31 @@ def remove_black_border_chessboard(img):
     cropped = img[y1:y2, x1:x2]
     return cropped
 
-def remove_remaining_black_borders(img):
-    lower_black = np.array([0, 0, 0])
-    upper_black = np.array([180, 255, 50])
-    
-    while img.shape[0] > 10:
-        bottom_row = img[-1:, :, :]
-        hsv = cv2.cvtColor(bottom_row, cv2.COLOR_BGR2HSV)
-        mask = cv2.inRange(hsv, lower_black, upper_black)
-        if cv2.countNonZero(mask) < 0.8 * mask.size:
-            break
-        img = img[:-1, :, :]
-    
-    while img.shape[0] > 10:
-        top_row = img[0:1, :, :]
-        hsv = cv2.cvtColor(top_row, cv2.COLOR_BGR2HSV)
-        mask = cv2.inRange(hsv, lower_black, upper_black)
-        if cv2.countNonZero(mask) < 0.8 * mask.size:
-            break
-        img = img[1:, :, :]
-    
+def trim_to_board(img):
+    """Remove non-board rows/columns from each edge.
+
+    Chess board rows have a bimodal color distribution (alternating light/dark
+    squares), so most pixels are far from the row median. Headers, footers, and
+    solid-color borders are roughly uniform — most pixels are near the median.
+    We remove edge rows/columns until we reach actual board content.
+    Works for any border color (black, gray, white, colored UI strips, etc.).
+    """
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if len(img.shape) == 3 else img.copy()
+
+    def is_non_board(strip):
+        """True if the row/column looks uniform (border), not like alternating chess squares."""
+        median = float(np.median(strip))
+        return float(np.mean(np.abs(strip.astype(float) - median) < 25)) > 0.60
+
+    while gray.shape[0] > 50 and is_non_board(gray[0]):
+        gray = gray[1:]; img = img[1:]
+    while gray.shape[0] > 50 and is_non_board(gray[-1]):
+        gray = gray[:-1]; img = img[:-1]
+    while gray.shape[1] > 50 and is_non_board(gray[:, 0]):
+        gray = gray[:, 1:]; img = img[:, 1:]
+    while gray.shape[1] > 50 and is_non_board(gray[:, -1]):
+        gray = gray[:, :-1]; img = img[:, :-1]
+
     return img
 
 def remove_black_border_color(img):
@@ -130,21 +135,21 @@ def remove_black_border(image_path):
     
     try:
         cropped = remove_black_border_chessboard(img)
-        cropped = remove_remaining_black_borders(cropped)
+        cropped = trim_to_board(cropped)
         return cropped
     except Exception as e:
         print(f"Chessboard method failed: {e}")
     
     try:
         cropped = remove_black_border_color(img)
-        cropped = remove_remaining_black_borders(cropped)
+        cropped = trim_to_board(cropped)
         return cropped
     except Exception as e:
         print(f"Color-based method failed: {e}")
     
     try:
         cropped = remove_black_border_edges(img)
-        cropped = remove_remaining_black_borders(cropped)
+        cropped = trim_to_board(cropped)
         return cropped
     except Exception as e:
         print(f"Edge-based method failed: {e}")

@@ -4,11 +4,12 @@ from io import BytesIO
 import cairosvg
 
 class ChessGUI:
-    def __init__(self, game_engine, board_size=400):
+    def __init__(self, game_engine, board_size=400, flipped=False):
         pygame.init()
         self.game = game_engine
         self.board_size = board_size
         self.square_size = board_size // 8
+        self.flipped = flipped  # True = Black's perspective (rank 1 at top, h-file left)
         self.screen = pygame.display.set_mode((board_size, board_size + 50))
         pygame.display.set_caption("Chess Vision")
         self.piece_images = self.load_piece_images()
@@ -39,6 +40,20 @@ class ChessGUI:
                     img, (self.square_size, self.square_size))
         return pieces
     
+    def _screen_coords(self, chess_file, chess_rank):
+        """Convert chess file/rank (0-indexed) to screen col/row."""
+        if self.flipped:
+            return 7 - chess_file, chess_rank
+        else:
+            return chess_file, 7 - chess_rank
+
+    def _chess_square_from_screen(self, screen_col, screen_row):
+        """Convert screen col/row to chess square index."""
+        if self.flipped:
+            return chess.square(7 - screen_col, screen_row)
+        else:
+            return chess.square(screen_col, 7 - screen_row)
+
     def draw_board(self):
         for row in range(8):
             for col in range(8):
@@ -48,18 +63,18 @@ class ChessGUI:
                     (col * self.square_size, row * self.square_size,
                      self.square_size, self.square_size)
                 )
-                
-                if chess.square(col, 7-row) in self.valid_moves:
+
+                if self._chess_square_from_screen(col, row) in self.valid_moves:
                     s = pygame.Surface((self.square_size, self.square_size))
                     s.set_alpha(100)
                     s.fill((124, 252, 0))
                     self.screen.blit(s, (col * self.square_size, row * self.square_size))
-        
+
         for square in chess.SQUARES:
             piece = self.game.board.piece_at(square)
             if piece:
                 piece_code = f"{'w' if piece.color == chess.WHITE else 'b'}{piece.symbol().upper()}"
-                col, row = chess.square_file(square), 7 - chess.square_rank(square)
+                col, row = self._screen_coords(chess.square_file(square), chess.square_rank(square))
                 self.screen.blit(
                     self.piece_images[piece_code],
                     (col * self.square_size, row * self.square_size)
@@ -89,8 +104,8 @@ class ChessGUI:
                 return "COPY"
             return None
         
-        col, row = x // self.square_size, 7 - (y // self.square_size)
-        square = chess.square(col, row)
+        col, row = x // self.square_size, y // self.square_size
+        square = self._chess_square_from_screen(col, row)
         
         if self.selected_square is None:
             piece = self.game.board.piece_at(square)
